@@ -10,9 +10,7 @@
 
 volatile uint8_t	inBuffer[32];
 volatile uint8_t	payloadBytes[32];
-extern volatile uint32_t		gWarpSPIBaudRateKbps;
-extern volatile uint32_t		gWarpSpiTimeoutMicroseconds;
-extern volatile WarpSPIDeviceState	deviceRFIDState;
+
 
 /*
  *	Override Warp firmware's use of these pins and define new aliases.
@@ -20,128 +18,104 @@ extern volatile WarpSPIDeviceState	deviceRFIDState;
 enum
 {
 	kRFIDPinMOSI	= GPIO_MAKE_PIN(HW_GPIOA, 8),
-	kRFIDPinMISO	= GPIO_MAKE_PIN(HW_GPIOA, 6),
 	kRFIDPinSCK		= GPIO_MAKE_PIN(HW_GPIOA, 9),
-	kRFIDPinCSn		= GPIO_MAKE_PIN(HW_GPIOA, 5),
+	kRFIDPinCSn		= GPIO_MAKE_PIN(HW_GPIOB, 13),
 	kRFIDPinDC		= GPIO_MAKE_PIN(HW_GPIOA, 12),
 	kRFIDPinRST		= GPIO_MAKE_PIN(HW_GPIOB, 0),
 };
 
-
-void
-initRFID(WarpSPIDeviceState volatile *  deviceStatePointer)
+static int
+writeCommand(uint8_t commandByte)
 {
-	deviceStatePointer->signalType	= (	kWarpTypeMaskAccelerationX |
-						kWarpTypeMaskAccelerationY |
-						kWarpTypeMaskAccelerationZ |
-						kWarpTypeMaskTemperature
-					);
-	return;
-}
-
-
-WarpStatus
-writeSensorRegisterRFID(uint8_t deviceRegister, uint8_t writeValue, int numberOfBytes)
-{	
-	/*
-	 *	Populate the shift-out register with the read-register command,
-	 *	followed by the register to be read, followed by a zero byte.
-	 */
-	deviceRFIDState.spiSourceBuffer[0] = deviceRegister;
-	deviceRFIDState.spiSourceBuffer[1] = writeValue;
-
-	deviceRFIDState.spiSinkBuffer[0] = 0x00;
-	deviceRFIDState.spiSinkBuffer[1] = 0x00;
+	spi_status_t status;
 
 	/*
-	 *	First, create a falling edge on chip-select.
+	 *	Drive /CS low.
 	 *
+	 *	Make sure there is a high-to-low transition by first driving high, delay, then drive low.
 	 */
 	GPIO_DRV_SetPinOutput(kRFIDPinCSn);
-	OSA_TimeDelay(50);
+	OSA_TimeDelay(10);
 	GPIO_DRV_ClearPinOutput(kRFIDPinCSn);
 
 	/*
-	 *	The result of the SPI transaction will be stored in deviceRFIDState.spiSinkBuffer.
-	 *
-	 *	Providing a device structure here is optional since it 
-	 *	is already provided when we did SPI_DRV_MasterConfigureBus(),
-	 *	so we pass in NULL.
-	 *
-	 *	TODO: the "master instance" is always 0 for the KL03 since
-	 *	there is only one SPI peripheral. We however should remove
-	 *	the '0' magic number and place this in a Warp-HWREV0 header
-	 *	file.
+	 *	Drive DC low (command).
 	 */
-	enableSPIpins();
-	deviceRFIDState.ksdk_spi_status = SPI_DRV_MasterTransferBlocking(0 /* master instance */,
-					NULL /* spi_master_user_config_t */,
-					(const uint8_t * restrict)deviceRFIDState.spiSourceBuffer,
-					(uint8_t * restrict)deviceRFIDState.spiSinkBuffer,
-					numberOfBytes /* transfer size */,
-					gWarpSpiTimeoutMicroseconds);
-	disableSPIpins();
+	GPIO_DRV_ClearPinOutput(kRFIDPinDC);
+
+	payloadBytes[0] = commandByte;
+	status = SPI_DRV_MasterTransferBlocking(0	/* master instance */,
+					NULL		/* spi_master_user_config_t */,
+					(const uint8_t * restrict)&payloadBytes[0],
+					(uint8_t * restrict)&inBuffer[0],
+					1		/* transfer size */,
+					1000		/* timeout in microseconds (unlike I2C which is ms) */);
 
 	/*
-	 *	Disengage the RFID
+	 *	Drive /CS high
 	 */
 	GPIO_DRV_SetPinOutput(kRFIDPinCSn);
 
-	return kWarpStatusOK;
+	return status;
 }
 
-WarpStatus
-readSensorRegisterRFID(uint8_t deviceRegister, int numberOfBytes)
-{	
-	//Number of bytes + 1 as 
-	return writeSensorRegisterRFID( deviceRegister, 0x00 /* writeValue */, numberOfBytes);
-}
-
-
-
-void 
-write_RFID(uint8_t addr, uint8_t val)
+static int
+readCommand(uint8_t address, uint8_t number_bytes)
 {
-	writeSensorRegisterRFID(((addr<<1)&0x7E), val, 2);
+	spi_status_t status;
+    uint8_t read_loc = (address <<1) | 0b10000000;
+    uint8_t command_buff[number_bytes];
+
+    /*
+     The RFID reader SPI returns data as long as the address is beign provided with the read bit set
+     to 1.
+    */
+    for(int i =0; i < number_bytes; i++)
+    {
+        command_buff[i] = read_loc;
+    }
 
 
+	/*
+	 *	Drive /CS low.
+	 *
+	 *	Make sure there is a high-to-low transition by first driving high, delay, then drive low.
+	 */
+	GPIO_DRV_SetPinOutput(kRFIDPinCSn);
+	OSA_TimeDelay(10);
+	GPIO_DRV_ClearPinOutput(kRFIDPinCSn);
+
+	/*
+	 *	Drive DC low (command).
+	 */
+	GPIO_DRV_ClearPinOutput(kRFIDPinDC);
+
+    /*
+    * We add 1 to the number of bytes recieved as the first byte transmitted has no corresponding received
+    *data.
+    */
+    
+	payloadBytes[0] = commandByte;
+	status = SPI_DRV_MasterTransferBlocking(0	/* master instance */,
+					NULL		/* spi_master_user_config_t */,
+					(const uint8_t * restrict)&command_buff[0],
+					(uint8_t * restrict)&inBuffer[0],
+					number_bytes +1		/* transfer size */,
+					1000		/* timeout in microseconds (unlike I2C which is ms) */);
+
+	/*
+	 *	Drive /CS high
+	 */
+	GPIO_DRV_SetPinOutput(kRFIDPinCSn);
+
+	return status;
 }
 
-uint8_t
-read_RFID(uint8_t addr, uint8_t number_of_bytes)
+
+
+int
+devRFIDinit(void)
 {
-	//Address formatted as 0XXXXXX0
-	readSensorRegisterRFID(((addr<<1)&0x7E) | 0x80,number_of_bytes+1);
-	
-	return deviceRFIDState.spiSinkBuffer[1];
-}
-
-void
-setBitMask(uint8_t addr, uint8_t mask)
-{
-	uint8_t current = read_RFID(addr,1);
-	write_RFID(addr, current | mask);
-}
-/*
-*Reset the device by writing the reset to the command register
-*/
-
-void reset_RFID(void){
-	write_RFID(CommandReg, MFRC522_SOFTRESET);
-}
-
-/*
-uint8_t get_version_RFID(void){
-	uint8_t response;
-
-  	response = readRFID(VersionReg, 1);
-
-	return response;
-}
-*/
-
-void
-devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer){
 	/*
 	 *	Override Warp firmware's use of these pins.
 	 *
@@ -149,7 +123,6 @@ devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer){
 	 */
 	PORT_HAL_SetMuxMode(PORTA_BASE, 8u, kPortMuxAlt3);
 	PORT_HAL_SetMuxMode(PORTA_BASE, 9u, kPortMuxAlt3);
-	PORT_HAL_SetMuxMode(PORTA_BASE, 6u, kPortMuxAlt3);
 
 	enableSPIpins();
 
@@ -158,13 +131,10 @@ devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer){
 	 *
 	 *	Reconfigure to use as GPIO.
 	 */
-	PORT_HAL_SetMuxMode(PORTA_BASE, 5u, kPortMuxAsGpio);
+	PORT_HAL_SetMuxMode(PORTB_BASE, 13u, kPortMuxAsGpio);
 	PORT_HAL_SetMuxMode(PORTA_BASE, 12u, kPortMuxAsGpio);
 	PORT_HAL_SetMuxMode(PORTB_BASE, 0u, kPortMuxAsGpio);
 
-
-	// Set CS pin high
-	GPIO_DRV_SetPinOutput(kRFIDPinCSn);
 
 	/*
 	 *	RST high->low->high.
@@ -176,19 +146,95 @@ devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer){
 	GPIO_DRV_SetPinOutput(kRFIDPinRST);
 	OSA_TimeDelay(100);
 
+	/*
+	 *	Initialization sequence, borrowed from https://github.com/adafruit/Adafruit-RFID-OLED-Driver-Library-for-Arduino
+	 */
+	writeCommand(kRFIDCommandDISPLAYOFF);	// 0xAE
+	writeCommand(kRFIDCommandSETREMAP);		// 0xA0
+	writeCommand(0x72);				// RGB Color
+	writeCommand(kRFIDCommandSTARTLINE);		// 0xA1
+	writeCommand(0x0);
+	writeCommand(kRFIDCommandDISPLAYOFFSET);	// 0xA2
+	writeCommand(0x0);
+	writeCommand(kRFIDCommandNORMALDISPLAY);	// 0xA4
+	writeCommand(kRFIDCommandSETMULTIPLEX);	// 0xA8
+	writeCommand(0x3F);				// 0x3F 1/64 duty
+	writeCommand(kRFIDCommandSETMASTER);		// 0xAD
+	writeCommand(0x8E);
+	writeCommand(kRFIDCommandPOWERMODE);		// 0xB0
+	writeCommand(0x0B);
+	writeCommand(kRFIDCommandPRECHARGE);		// 0xB1
+	writeCommand(0x31);
+	writeCommand(kRFIDCommandCLOCKDIV);		// 0xB3
+	writeCommand(0xF0);				// 7:4 = Oscillator Frequency, 3:0 = CLK Div Ratio (A[3:0]+1 = 1..16)
+	writeCommand(kRFIDCommandPRECHARGEA);	// 0x8A
+	writeCommand(0x64);
+	writeCommand(kRFIDCommandPRECHARGEB);	// 0x8B
+	writeCommand(0x64);
+	writeCommand(kRFIDCommandPRECHARGEA);	// 0x8C
+	writeCommand(0x64);
+	writeCommand(kRFIDCommandPRECHARGELEVEL);	// 0xBB
+	writeCommand(0x3E);
+	writeCommand(kRFIDCommandVCOMH);		// 0xBE
+	writeCommand(0x3E);
+	writeCommand(kRFIDCommandMASTERCURRENT);	// 0x87
+	writeCommand(0xF);
+	writeCommand(kRFIDCommandCONTRASTA);		// 0x81
+	writeCommand(0x91);
+	writeCommand(kRFIDCommandCONTRASTB);		// 0x82
+	writeCommand(0xFF);
+	writeCommand(kRFIDCommandCONTRASTC);		// 0x83
+	writeCommand(0x7D);
+	writeCommand(kRFIDCommandDISPLAYON);		// Turn on oled panel
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with initialization sequence...\n");
 
-	//reset();
+	/*
+	 *	To use fill commands, you will have to issue a command to the display to enable them. See the manual.
+	 */
+	writeCommand(kRFIDCommandFILL);
+	writeCommand(0x01);
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with enabling fill...\n");
 
-	//Timer: TPrescaler*TreloadVal/6.78MHz = 24ms
-	write_RFID(TModeReg, 0x8D);       // Tauto=1; f(Timer) = 6.78MHz/TPreScaler
-	write_RFID(TPrescalerReg, 0x3E);  // TModeReg[3..0] + TPrescalerReg
-	write_RFID(TReloadRegL, 30);
-	write_RFID(TReloadRegH, 0);
+	/*
+	 *	Clear Screen
+	 */
+	writeCommand(kRFIDCommandCLEAR);
+	writeCommand(0x00);
+	writeCommand(0x00);
+	writeCommand(0x5F);
+	writeCommand(0x3F);
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with screen clear...\n");
 
-	write_RFID(TxAutoReg, 0x40);      // 100%ASK
-	write_RFID(ModeReg, 0x3D);        // CRC initial value 0x6363
 
-	setBitMask(TxControlReg, 0x03);        // Turn antenna on.
-	SEGGER_RTT_WriteString(0, "\nSetup nominally complete\n");
-	return ; 
+
+	/*
+	 *	Read the manual for the RFID (RFID_1.2.pdf) to figure
+	 *	out how to fill the entire screen with the brightest shade
+	 *	of green.
+	 */
+
+	writeCommand(kRFIDCommandFILL);
+	writeCommand(0x01);
+
+	writeCommand(kRFIDCommandDRAWRECT);
+	writeCommand(0x00);
+	writeCommand(0x00);
+	writeCommand(0x5F);
+	writeCommand(0x3F);
+	//Colour lines
+	writeCommand(0x00);
+	writeCommand(0x3F);
+	writeCommand(0x00);
+	//Colour fill
+	writeCommand(0x00);
+	writeCommand(0x3F);
+	writeCommand(0x00);
+
+
+
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with draw rectangle...\n");
+
+
+
+	return 0;
 }

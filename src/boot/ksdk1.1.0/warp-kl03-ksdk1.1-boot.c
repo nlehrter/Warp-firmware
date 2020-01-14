@@ -79,10 +79,9 @@
 //#include "devAS7263.h"
 //#include "devRV8803C7.h"
 #else
-#	include "devMMA8451Q.h"
-//#	include "devSSD1331.h"
-//#	include "devINA.h"
-#	include "devRFID.h"
+//#	include "devMMA8451Q.h"
+#	include "devSSD1331.h"
+#	include "devINA.h"
 #endif
 
 #define WARP_BUILD_ENABLE_SEGGER_RTT_PRINTF
@@ -108,10 +107,6 @@ volatile WarpSPIDeviceState			deviceADXL362State;
 volatile WarpI2CDeviceState			deviceBMX055accelState;
 volatile WarpI2CDeviceState			deviceBMX055gyroState;
 volatile WarpI2CDeviceState			deviceBMX055magState;
-#endif
-
-#ifdef WARP_BUILD_ENABLE_DEVRFID
-volatile WarpSPIDeviceState			deviceRFIDState;
 #endif
 
 #ifdef WARP_BUILD_ENABLE_DEVMMA8451Q
@@ -1253,11 +1248,6 @@ main(void)
 	initINA(	0x40	/* i2cAddress */,	&deviceINAState	);
 #endif	
 
-//Set this to initialise the SPI pins
-#ifdef WARP_BUILD_ENABLE_DEVRFID
-	//devRFIDinit(&deviceRFIDState);
-#endif	
-
 #ifdef WARP_BUILD_ENABLE_DEVLPS25H
 	initLPS25H(	0x5C	/* i2cAddress */,	&deviceLPS25HState	);
 #endif
@@ -1358,7 +1348,7 @@ main(void)
 	 *	Notreached
 	 */
 #endif
-	
+	devSSD1331init();
 	while (1)
 	{
 		/*
@@ -1462,14 +1452,11 @@ main(void)
 		SEGGER_RTT_WriteString(0, "\r- 'z': dump all sensors data.\n");
 		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 
+#ifdef WARP_BUILD_ENABLE_DEVINA
 		SEGGER_RTT_WriteString(0, "\r- '1': Calibrate INA219.\n");
 		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 
 		SEGGER_RTT_WriteString(0, "\r- '2': Read 1000 currents from INA219.\n");
-		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
-
-#ifdef WARP_BUILD_ENABLE_DEVRFID
-		SEGGER_RTT_WriteString(0, "\r- '3': Read an example register from RFID sensor.\n");
 		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 #endif
 
@@ -2507,74 +2494,21 @@ main(void)
 			}
 
 			case '1':
-			{
-			#ifdef WARP_BUILD_ENABLE_DEVINA	
+			{	
 				WriteConfigINA( 0b0010000110011111 /*payload*/, menuI2cPullupValue);
 				WriteCalibINA( 0xA000 /*payload*/, menuI2cPullupValue);
 				SEGGER_RTT_WriteString(0, "\r\n\tCalibration set\n");
-			#endif
-			#ifdef WARP_BUILD_ENABLE_DEVRFID
-				SEGGER_RTT_WriteString(0, "Made it to here");
-			#endif
-			break;
+				break;
 			}
 
 			case '2':
 			{
-			#ifdef WARP_BUILD_ENABLE_DEVINA
 				SEGGER_RTT_WriteString(0, "\r\n\t1000 current readings\n");
 				for(int i =0; i < 1000; i++){
-				//uint16_t current_reading = ReadCurrentINA(menuI2cPullupValue);
-
-				readSensorRegisterMMA8451Q(0x01, 2);
-				uint16_t read_x = ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) <<6) | ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) >> 2);
-				read_x = (read_x ^ (1<<13)) -(1<<13);
-				SEGGER_RTT_printf(0, "\r\t%d\n", read_x);
+				uint16_t current_reading = ReadCurrentINA(menuI2cPullupValue);
+				SEGGER_RTT_printf(0, "\r\t%d'\n", current_reading);
 				}
 				break;
-			#endif
-			printSensorDataMMA8451Q(true);
-			break;
-			}
-			case '3':
-			{
-
-				//devSSD1331init();
-				/*
-				enableI2Cpins(menuI2cPullupValue);
-				configureSensorMMA8451Q(0x80,0b00000001,menuI2cPullupValue);
-
-				uint16_t read_x = 0;
-				uint16_t read_y = 0;
-				uint16_t read_z = 0;
-
-				readSensorRegisterMMA8451Q(0x01, 2);
-				read_x = ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) <<6) | ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) >> 2);
-
-				read_x = (read_x ^ (1<<13)) -(1<<13);
-				SEGGER_RTT_printf(0, "\n\r\tRead value for x is: %d\n", read_x);
-				*/
-				/*
-				readSensorRegisterMMA8451Q(0x03, 2);
-				read_x = ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) <<6) | ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) >> 2);
-
-				readSensorRegisterMMA8451Q(0x05, 2);
-				read_x = ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) <<6) | ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) >> 2);
-				SEGGER_RTT_printf(0, "\n\r\tRead value for x is: %d'\n", read_x);
-				*/
-
-				//printSensorDataMMA8451Q(true);
-				
-				SEGGER_RTT_WriteString(0, "\nWe have arrived at the register read location\n");
-				devRFIDinit(&deviceRFIDState);
-				//uint8_t version_type = read_RFID(TModeReg, 1);
-				readSensorRegisterRFID(TModeReg,2);
-				uint8_t version_type = deviceRFIDState.spiSinkBuffer[1];
-				uint8_t maybe_veriosn = deviceRFIDState.spiSinkBuffer[0];
-				SEGGER_RTT_printf(0, "\r\t%d\n", version_type);
-				SEGGER_RTT_printf(0, "\r\t%d\n", maybe_veriosn);
-				break;
-				
 			}
 			/*
 			 *	Ignore naked returns.
