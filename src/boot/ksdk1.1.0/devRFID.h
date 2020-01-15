@@ -112,9 +112,13 @@
 
 
 //uint8_t get_version_RFID(void)
-void devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer);
-uint8_t read_RFID(uint8_t addr,uint8_t number_of_bytes);
-void write_RFID(uint8_t addr, uint8_t val);
-void initRFID(WarpSPIDeviceState volatile *  deviceStatePointer);
 WarpStatus readSensorRegisterRFID(uint8_t deviceRegister, int numberOfBytes);
 WarpStatus writeSensorRegisterRFID(uint8_t deviceRegister, uint8_t writeValue, int numberOfBytes);
+void devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer);
+uint8_t read_RFID(uint8_t addr);
+void write_RFID(uint8_t addr, uint8_t val);
+void clearBitMask(uint8_t addr, uint8_t mask);
+uint8_t getFirmwareVersion(void);
+uint8_t commandTag(uint8_t cmd, uint8_t *data, int dlen, uint8_t *result, int *rlen);
+uint8_t request_tag(uint8_t mode, uint8_t *data);
+uint8_t check_tag(uint8_t * idf, int request_status, uint8_t FSM_state);

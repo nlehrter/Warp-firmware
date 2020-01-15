@@ -8,8 +8,6 @@
 #include "warp.h"
 #include "devRFID.h"
 
-volatile uint8_t	inBuffer[32];
-volatile uint8_t	payloadBytes[32];
 extern volatile uint32_t		gWarpSPIBaudRateKbps;
 extern volatile uint32_t		gWarpSpiTimeoutMicroseconds;
 extern volatile WarpSPIDeviceState	deviceRFIDState;
@@ -26,18 +24,6 @@ enum
 	kRFIDPinDC		= GPIO_MAKE_PIN(HW_GPIOA, 12),
 	kRFIDPinRST		= GPIO_MAKE_PIN(HW_GPIOB, 0),
 };
-
-
-void
-initRFID(WarpSPIDeviceState volatile *  deviceStatePointer)
-{
-	deviceStatePointer->signalType	= (	kWarpTypeMaskAccelerationX |
-						kWarpTypeMaskAccelerationY |
-						kWarpTypeMaskAccelerationZ |
-						kWarpTypeMaskTemperature
-					);
-	return;
-}
 
 
 WarpStatus
@@ -73,14 +59,14 @@ writeSensorRegisterRFID(uint8_t deviceRegister, uint8_t writeValue, int numberOf
 	 *	the '0' magic number and place this in a Warp-HWREV0 header
 	 *	file.
 	 */
-	enableSPIpins();
+	//enableSPIpins();
 	deviceRFIDState.ksdk_spi_status = SPI_DRV_MasterTransferBlocking(0 /* master instance */,
 					NULL /* spi_master_user_config_t */,
 					(const uint8_t * restrict)deviceRFIDState.spiSourceBuffer,
 					(uint8_t * restrict)deviceRFIDState.spiSinkBuffer,
 					numberOfBytes /* transfer size */,
 					gWarpSpiTimeoutMicroseconds);
-	disableSPIpins();
+	//disableSPIpins();
 
 	/*
 	 *	Disengage the RFID
@@ -108,10 +94,10 @@ write_RFID(uint8_t addr, uint8_t val)
 }
 
 uint8_t
-read_RFID(uint8_t addr, uint8_t number_of_bytes)
+read_RFID(uint8_t addr)
 {
 	//Address formatted as 0XXXXXX0
-	readSensorRegisterRFID(((addr<<1)&0x7E) | 0x80,number_of_bytes+1);
+	readSensorRegisterRFID(((addr<<1)&0x7E) | 0x80,2);
 	
 	return deviceRFIDState.spiSinkBuffer[1];
 }
@@ -119,26 +105,122 @@ read_RFID(uint8_t addr, uint8_t number_of_bytes)
 void
 setBitMask(uint8_t addr, uint8_t mask)
 {
-	uint8_t current = read_RFID(addr,1);
+	uint8_t current = read_RFID(addr);
 	write_RFID(addr, current | mask);
 }
-/*
-*Reset the device by writing the reset to the command register
-*/
 
-void reset_RFID(void){
+void 
+clearBitMask(uint8_t addr, uint8_t mask)
+{
+	uint8_t current;
+	current = read_RFID(addr);
+	write_RFID(addr, current & (~mask));
+}
+
+void
+reset_RFID(void)
+{
 	write_RFID(CommandReg, MFRC522_SOFTRESET);
 }
 
-/*
-uint8_t get_version_RFID(void){
-	uint8_t response;
-
-  	response = readRFID(VersionReg, 1);
-
+uint8_t
+getFirmwareVersion(void)
+{
+	volatile uint8_t response;
+	response = read_RFID(VersionReg);
 	return response;
+
 }
-*/
+
+uint8_t request_tag(uint8_t mode, uint8_t *data)
+{	
+	int status, len;
+	write_RFID(BitFramingReg, 0x07);
+	data[0] = mode;
+
+	status = commandTag(MFRC522_TRANSCEIVE, data, 1, data, &len);
+
+	if((status != MI_OK) || (len != 0x10)){
+		status = MI_ERR;
+	};
+
+	return status;
+}
+
+uint8_t commandTag(uint8_t cmd, uint8_t *data, int dlen, uint8_t *result, int *rlen)
+{
+	int status = MI_ERR;
+  	uint8_t irqEn = 0x70;
+  	uint8_t waitIRq = 0x30;
+  	uint8_t lastBits, n;
+  	int i;
+
+
+	write_RFID(CommIEnReg, irqEn|0x80);    // interrupt request
+	clearBitMask(CommIrqReg, 0x80);             // Clear all interrupt requests bits.
+	setBitMask(FIFOLevelReg, 0x80);             // FlushBuffer=1, FIFO initialization.
+
+	write_RFID(CommandReg, MFRC522_IDLE);  // No action, cancel the current command.
+
+	// Write to FIFO
+	for (i=0; i < dlen; i++) {
+		write_RFID(FIFODataReg, data[i]);
+	}
+
+	// Execute the command.
+	write_RFID(CommandReg, cmd);
+	if (cmd == MFRC522_TRANSCEIVE) {
+		setBitMask(BitFramingReg, 0x80);  // StartSend=1, transmission of data starts
+	}
+
+	// Waiting for the command to complete so we can receive data.
+	i = 25; // Max wait time is 25ms.
+	do {
+		OSA_TimeDelay(1); // Currently hoping time delay is in ms, will adjust if not
+		// CommIRqReg[7..0]
+		// Set1 TxIRq RxIRq IdleIRq HiAlerIRq LoAlertIRq ErrIRq TimerIRq
+		n = read_RFID(CommIrqReg);
+		i--;
+	} while ((i!=0) && !(n&0x01) && !(n&waitIRq));
+
+	clearBitMask(BitFramingReg, 0x80);  // StartSend=0
+
+	if (i != 0) { // Request did not time out.
+		if(!(read_RFID(ErrorReg) & 0x1B)) {  // BufferOvfl Collerr CRCErr ProtocolErr
+		status = MI_OK;
+		if (n & irqEn & 0x01) {
+			status = MI_NOTAGERR;
+		}
+
+		if (cmd == MFRC522_TRANSCEIVE) {
+			n = read_RFID(FIFOLevelReg);
+			lastBits = read_RFID(ControlReg) & 0x07;
+			if (lastBits) {
+			*rlen = (n-1)*8 + lastBits;
+			} else {
+			*rlen = n*8;
+			}
+
+			if (n == 0) {
+			n = 1;
+			}
+
+			if (n > MAX_LEN) {
+			n = MAX_LEN;
+			}
+
+			// Reading the recieved data from FIFO.
+			for (i=0; i<n; i++) {
+			result[i] = read_RFID(FIFODataReg);
+			}
+		}
+		} else {
+		status = MI_ERR;
+		}
+	}
+	return status;
+}
+
 
 void
 devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer){
@@ -191,4 +273,43 @@ devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer){
 	setBitMask(TxControlReg, 0x03);        // Turn antenna on.
 	SEGGER_RTT_WriteString(0, "\nSetup nominally complete\n");
 	return ; 
+}
+
+uint8_t check_tag(uint8_t * idf, int request_status, uint8_t FSM_state)
+{
+	uint8_t data_rfid[MAX_LEN];
+	request_status = request_tag(MF1_REQIDL, data_rfid);
+	uint8_t uip[5];
+	memcpy(uip, data_rfid, 5);
+	if(request_status == MI_OK)
+	{
+		bool correct = true;
+		for (int i = 0; i < 5; i++)
+		{
+			if (uip[i] != idf[i]){
+				correct = false;
+				}
+		}
+
+		if(correct)
+		{
+			SEGGER_RTT_WriteString(0, "Same tag, unset\n");
+			FSM_state = 1;
+		}
+		else
+		{	
+			FSM_state = 3;
+			SEGGER_RTT_WriteString(0, "Different tag, alarm triggered\n");
+			for (int j = 0; j < 5; j++)
+			{
+				SEGGER_RTT_printf(0, "\n\r\tRead value for tag is: %d", uip[j]);
+			}
+		}
+	}
+		else
+		{
+			SEGGER_RTT_WriteString(0, "No read, set\n");
+		}
+		return FSM_state;
+
 }

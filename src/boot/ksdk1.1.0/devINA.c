@@ -219,3 +219,85 @@ ReadCurrentINA(uint16_t menuI2cPullupValue)
 
 
 }
+
+/*
+SEGGER_RTT_WriteString(0, "\nWe have arrived at the register read location\n");
+				struct machine_states{
+					uint8_t FSM;
+					uint8_t request_status;
+				}machine_state;
+				
+				devRFIDinit(&deviceRFIDState);
+
+				uint8_t uid[5];
+				machine_state.FSM = 1;
+				machine_state.request_status = MI_ERR;
+
+				while(1){
+					uint8_t data_rfid[MAX_LEN];
+
+					switch(machine_state.FSM){
+						case(1):
+							
+							machine_state.request_status = request_tag(MF1_REQIDL, data_rfid);
+							if(machine_state.request_status == MI_OK){
+								memcpy(uid, data_rfid, 5);
+								for (int j = 0; j < 5; j++){
+									SEGGER_RTT_printf(0, "\n\r\tRead value for tag is: %d", uid[j]);
+								}
+								SEGGER_RTT_WriteString(0, "\n Set \n");
+								machine_state.FSM = 2;
+							}
+							else{
+								SEGGER_RTT_WriteString(0, "No read\n");
+
+							}
+						
+							break;
+						case(2):
+
+							check_tag(&machine_state);
+							break;
+					
+						case(3):
+							check_tag(&machine_state);
+
+					}
+					machine_state.request_status = MI_ERR;
+					SEGGER_RTT_printf(0, "\n\r\tCurrent state: %d", machine_state.FSM);
+
+
+
+					bool
+check_tag(struct FSM_state *)
+{
+	FSM_state -> request_status = request_tag(MF1_REQIDL, data_rfid);
+	if(FSM_state -> request_status == MI_OK)
+	{
+		bool correct = true;
+		for (int i = 0; i < 5; i++)
+		{
+			if (data_rfid[i] != uid[i])
+			{
+				correct = false;
+			}
+		}
+
+		if(correct)
+		{
+			SEGGER_RTT_WriteString(0, "Same tag, unset\n");
+			FSM_state -> FSM = 1;
+		}
+		else
+		{
+			SEGGER_RTT_WriteString(0, "Different tag, Alarm triggered\n");
+			FSM_state -> FSM = 3;
+		}
+	}
+	else
+	{
+		SEGGER_RTT_WriteString(0, "No read, set\n");
+	}
+}
+
+*/

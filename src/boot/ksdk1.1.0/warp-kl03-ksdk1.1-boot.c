@@ -2539,8 +2539,7 @@ main(void)
 			case '3':
 			{
 
-				//devSSD1331init();
-				/*
+				
 				enableI2Cpins(menuI2cPullupValue);
 				configureSensorMMA8451Q(0x80,0b00000001,menuI2cPullupValue);
 
@@ -2553,7 +2552,7 @@ main(void)
 
 				read_x = (read_x ^ (1<<13)) -(1<<13);
 				SEGGER_RTT_printf(0, "\n\r\tRead value for x is: %d\n", read_x);
-				*/
+				
 				/*
 				readSensorRegisterMMA8451Q(0x03, 2);
 				read_x = ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) <<6) | ((deviceMMA8451QState.i2cBuffer[0] & 0xFF) >> 2);
@@ -2565,15 +2564,48 @@ main(void)
 
 				//printSensorDataMMA8451Q(true);
 				
+/*
 				SEGGER_RTT_WriteString(0, "\nWe have arrived at the register read location\n");
 				devRFIDinit(&deviceRFIDState);
-				//uint8_t version_type = read_RFID(TModeReg, 1);
-				readSensorRegisterRFID(TModeReg,2);
-				uint8_t version_type = deviceRFIDState.spiSinkBuffer[1];
-				uint8_t maybe_veriosn = deviceRFIDState.spiSinkBuffer[0];
-				SEGGER_RTT_printf(0, "\r\t%d\n", version_type);
-				SEGGER_RTT_printf(0, "\r\t%d\n", maybe_veriosn);
+
+				uint8_t FSM = 1;
+				uint8_t uid[5];
+				int request_status = MI_ERR;
+				while(1){
+					uint8_t data_rfid[MAX_LEN];
+					switch(FSM){
+						case(1):
+							
+							request_status = request_tag(MF1_REQIDL, data_rfid);
+							if(request_status == MI_OK){
+								memcpy(uid, data_rfid, 5);
+								for (int j = 0; j < 5; j++){
+									SEGGER_RTT_printf(0, "\n\r\tRead value for tag is: %d", uid[j]);
+								}
+								SEGGER_RTT_WriteString(0, "\n Set \n");
+								FSM = 2;
+							}
+							else{
+								SEGGER_RTT_WriteString(0, "No read\n");
+
+							}
+						
+							break;
+						case(2):
+							FSM = check_tag(uid, request_status, FSM);
+							break;
+
+						case(3):
+							FSM = check_tag(uid, request_status, FSM);
+							break;
+
+					}
+					request_status = MI_ERR;
+
+				}
+				*/
 				break;
+				
 				
 			}
 			/*
