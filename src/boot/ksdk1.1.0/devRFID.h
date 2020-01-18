@@ -1,7 +1,35 @@
+/*
+Copyright © 2020 Bjarte Johansen <Bjarte.Johansen@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the “Software”),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+and/or sell copies of the Software, and to permit persons to whom the 
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Based on code by Dr.Leong ( WWW.B2CQSHOP.COM ) and
+Miguel Balboa (https://github.com/miguelbalboa/rfid).
+*/
+
 #ifndef  WARP_BUILD_ENABLE_DEVRFID
 #define  WARP_BUILD_ENABLE_DEVRFID
 #endif
 
+/*
+* Define all critical commands and parameters for use with the 
+* tag reader copied over from C++ library example code
+*/
 #define     MAX_LEN               16        // Maximum length of an array.
 
 // MF522 MFRC522 error codes.
@@ -111,7 +139,6 @@
 #define     Reserved34            0x3F
 
 
-//uint8_t get_version_RFID(void)
 WarpStatus readSensorRegisterRFID(uint8_t deviceRegister, int numberOfBytes);
 WarpStatus writeSensorRegisterRFID(uint8_t deviceRegister, uint8_t writeValue, int numberOfBytes);
 void devRFIDinit(WarpSPIDeviceState volatile *  deviceStatePointer);
@@ -122,3 +149,4 @@ uint8_t getFirmwareVersion(void);
 uint8_t commandTag(uint8_t cmd, uint8_t *data, int dlen, uint8_t *result, int *rlen);
 uint8_t request_tag(uint8_t mode, uint8_t *data);
 uint8_t check_tag(uint8_t * idf, int request_status, uint8_t FSM_state);
+uint8_t anti_collision(uint8_t *serial);
