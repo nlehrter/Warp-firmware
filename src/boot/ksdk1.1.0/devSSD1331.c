@@ -18,8 +18,9 @@ volatile uint8_t	payloadBytes[32];
 enum
 {
 	kSSD1331PinMOSI		= GPIO_MAKE_PIN(HW_GPIOA, 8),
+	kSSD1331PinMISO		= GPIO_MAKE_PIN(HW_GPIOA, 6),
 	kSSD1331PinSCK		= GPIO_MAKE_PIN(HW_GPIOA, 9),
-	kSSD1331PinCSn		= GPIO_MAKE_PIN(HW_GPIOB, 13),
+	kSSD1331PinCSn		= GPIO_MAKE_PIN(HW_GPIOA, 5),
 	kSSD1331PinDC		= GPIO_MAKE_PIN(HW_GPIOA, 12),
 	kSSD1331PinRST		= GPIO_MAKE_PIN(HW_GPIOB, 0),
 };
@@ -58,6 +59,41 @@ writeCommand(uint8_t commandByte)
 
 	return status;
 }
+uint8_t 
+readCommand(uint8_t rcommand, uint8_t number_of_bytes){
+	spi_status_t status;
+
+	/*
+	 *	Drive /CS low.
+	 *
+	 *	Make sure there is a high-to-low transition by first driving high, delay, then drive low.
+	 */
+	GPIO_DRV_SetPinOutput(kSSD1331PinCSn);
+	OSA_TimeDelay(10);
+	GPIO_DRV_ClearPinOutput(kSSD1331PinCSn);
+
+	/*
+	 *	Drive DC low (command).
+	 */
+	GPIO_DRV_ClearPinOutput(kSSD1331PinDC);
+
+	payloadBytes[0] = rcommand;
+	payloadBytes[1] = 0x00;
+	status = SPI_DRV_MasterTransferBlocking(0	/* master instance */,
+					NULL		/* spi_master_user_config_t */,
+					(const uint8_t * restrict)&payloadBytes,
+					(uint8_t * restrict)&inBuffer,
+					number_of_bytes		/* transfer size */,
+					1000		/* timeout in microseconds (unlike I2C which is ms) */);
+
+	/*
+	 *	Drive /CS high
+	 */
+	GPIO_DRV_SetPinOutput(kSSD1331PinCSn);
+
+	return inBuffer[1];
+
+}
 
 
 
@@ -70,6 +106,7 @@ devSSD1331init(void)
 	 *	Re-configure SPI to be on PTA8 and PTA9 for MOSI and SCK respectively.
 	 */
 	PORT_HAL_SetMuxMode(PORTA_BASE, 8u, kPortMuxAlt3);
+	PORT_HAL_SetMuxMode(PORTA_BASE, 6u, kPortMuxAlt3);
 	PORT_HAL_SetMuxMode(PORTA_BASE, 9u, kPortMuxAlt3);
 
 	enableSPIpins();
@@ -79,7 +116,7 @@ devSSD1331init(void)
 	 *
 	 *	Reconfigure to use as GPIO.
 	 */
-	PORT_HAL_SetMuxMode(PORTB_BASE, 13u, kPortMuxAsGpio);
+	PORT_HAL_SetMuxMode(PORTA_BASE, 5u, kPortMuxAsGpio);
 	PORT_HAL_SetMuxMode(PORTA_BASE, 12u, kPortMuxAsGpio);
 	PORT_HAL_SetMuxMode(PORTB_BASE, 0u, kPortMuxAsGpio);
 
@@ -178,8 +215,12 @@ devSSD1331init(void)
 	writeCommand(0x3F);
 	writeCommand(0x00);
 
-
-
+	/*
+	uint8_t value = readCommand(kSSD1331CommandCONTRASTA,2);
+	SEGGER_RTT_printf(0, "\n\r\tValue returned: %d\n", value);
+	value = readCommand(kSSD1331CommandMASTERCURRENT,2);
+	SEGGER_RTT_printf(0, "\n\r\tValue returned: %d\n", value);
+	*/
 //	SEGGER_RTT_WriteString(0, "\r\n\tDone with draw rectangle...\n");
 
 

@@ -88,19 +88,32 @@ gpio_output_pin_user_config_t	outputPins[] = {
 		.config.slewRate = kPortSlowSlewRate,
 		.config.driveStrength = kPortLowDriveStrength,
 	},
+	{
+		.pinName = kWarpPinPTB11,				/*	Was kWarpPinUnusedPTB7 in Warp v2			*/
+		.config.outputLogic = 1,
+		.config.slewRate = kPortSlowSlewRate,
+		.config.driveStrength = kPortLowDriveStrength,
+	},
+	{
+		.pinName = kWarpPinPTB10,				/*	Was kWarpPinUnusedPTB7 in Warp v2			*/
+		.config.outputLogic = 1,
+		.config.slewRate = kPortSlowSlewRate,
+		.config.driveStrength = kPortLowDriveStrength,
+	},
 #ifndef WARP_BUILD_ENABLE_THERMALCHAMBERANALYSIS
-	{
-		.pinName = kWarpPinPAN1326_nSHUTD,			/*	Was kWarpPinUnusedPTB10 in Warp v2			*/
+	/*{
+		.pinName = kWarpPinPAN1326_nSHUTD,			//	Was kWarpPinUnusedPTB10 in Warp v2			
 		.config.outputLogic = 1,
 		.config.slewRate = kPortSlowSlewRate,
 		.config.driveStrength = kPortLowDriveStrength,
 	},
 	{
-		.pinName = kWarpPinISL23415_nCS, 			/*	Was kWarpPinTPS82675_MODE in Warp v2			*/
+		.pinName = kWarpPinISL23415_nCS, 			//	Was kWarpPinTPS82675_MODE in Warp v2
 		.config.outputLogic = 1,
 		.config.slewRate = kPortSlowSlewRate,
 		.config.driveStrength = kPortLowDriveStrength,
 	},
+	*/
 	{
 		.pinName = kWarpPinCLKOUT32K,
 		.config.outputLogic = 1,
@@ -177,6 +190,12 @@ gpio_output_pin_user_config_t	outputPins[] = {
 	},
 	{
 		.pinName = kWarpPinUnusedPTB9,
+		.config.outputLogic = 1,
+		.config.slewRate = kPortSlowSlewRate,
+		.config.driveStrength = kPortLowDriveStrength,
+	},
+	{
+		.pinName = kWarpPinUnusedPTB11,
 		.config.outputLogic = 1,
 		.config.slewRate = kPortSlowSlewRate,
 		.config.driveStrength = kPortLowDriveStrength,
